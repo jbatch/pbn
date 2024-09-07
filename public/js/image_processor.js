@@ -41,6 +41,11 @@
 
     const dominantColors = findDominantColors(processedImageData, numColors);
 
+    // Create a color map for quick index lookup
+    const colorMap = new Map(
+      dominantColors.map((color, index) => [color.join(","), index])
+    );
+
     for (let i = 0; i < processedImageData.data.length; i += 4) {
       const pixel = [
         processedImageData.data[i],
@@ -56,7 +61,17 @@
 
     mergeProblematicBlobs(processedImageData, minBlobSize, minBlobThickness);
 
+    // Generate the outline image with numbered blobs
+    const { outlineImageData, blobCenters } = generateOutlineImageWithNumbers(
+      processedImageData,
+      colorMap
+    );
+
     ctx.putImageData(processedImageData, 0, 0);
+    const processedDataUrl = canvas.toDataURL();
+
+    ctx.putImageData(outlineImageData, 0, 0);
+    const outlineDataUrl = canvas.toDataURL();
 
     // Convert dominantColors to hex format
     const hexColors = dominantColors.map((color) => {
@@ -65,29 +80,36 @@
         .padStart(2, "0")}${color[2].toString(16).padStart(2, "0")}`;
     });
 
-    // Generate the outline image
-    const outlineImageData = generateOutlineImage(processedImageData);
-
-    // Convert processedImageData back to canvas
-    ctx.putImageData(processedImageData, 0, 0);
-    const processedDataUrl = canvas.toDataURL();
-
-    // Convert outlineImageData to canvas
-    ctx.putImageData(outlineImageData, 0, 0);
-    const outlineDataUrl = canvas.toDataURL();
-
     return {
       processedImageDataUrl: processedDataUrl,
       outlineImageDataUrl: outlineDataUrl,
       colors: hexColors,
+      blobCenters: blobCenters,
     };
   }
 
-  function generateOutlineImage(imageData) {
+  function generateOutlineImageWithNumbers(imageData, colorMap) {
     const width = imageData.width;
     const height = imageData.height;
     const outlineData = new ImageData(width, height);
+    const visited = new Array(width * height).fill(false);
+    const blobCenters = [];
 
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!visited[y * width + x]) {
+          const blob = floodFill(imageData, x, y, visited);
+          if (blob.length > 0) {
+            const center = calculateBlobCenter(blob);
+            const color = getColorAt(imageData, x, y);
+            const colorIndex = colorMap.get(color.join(","));
+            blobCenters.push({ x: center.x, y: center.y, index: colorIndex });
+          }
+        }
+      }
+    }
+
+    // Draw outlines
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const currentColor = getColorAt(imageData, x, y);
@@ -126,7 +148,18 @@
       }
     }
 
-    return outlineData;
+    return { outlineImageData: outlineData, blobCenters: blobCenters };
+  }
+
+  function calculateBlobCenter(blob) {
+    const sum = blob.reduce(
+      (acc, point) => ({ x: acc.x + point[0], y: acc.y + point[1] }),
+      { x: 0, y: 0 }
+    );
+    return {
+      x: Math.round(sum.x / blob.length),
+      y: Math.round(sum.y / blob.length),
+    };
   }
 
   function findDominantColors(imageData, numColors) {

@@ -1,48 +1,9 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Layout from "../Layout";
 import ImageUpload from "../components/ImageUpload";
 import ProcessingSettings from "../components/ProcessingSettings";
 import Modal from "../components/Modal";
 import ProcessedImageModal from "../components/ProcessedImageModal";
-
-const MAX_IMAGE_SIZE = 1200; // Maximum width or height in pixels
-
-function resizeImage(file, maxSize) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > maxSize) {
-            height *= maxSize / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width *= maxSize / height;
-            height = maxSize;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          resolve(blob);
-        }, file.type);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function Home() {
   const [imageSrc, setImageSrc] = useState("/mountains.jpeg");
@@ -51,26 +12,22 @@ export default function Home() {
   const [dominantColors, setDominantColors] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
+  const [blobCenters, setBlobCenters] = useState([]);
   const [numColors, setNumColors] = useState(5);
   const [minBlobSize, setMinBlobSize] = useState(100);
   const [minBlobThickness, setMinBlobThickness] = useState(3);
   const [blurRadius, setBlurRadius] = useState(2);
   const [blurType, setBlurType] = useState("gaussian");
 
+  const originalImageRef = useRef(null);
+
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
+      originalImageRef.current = img;
       if (typeof window.initializeImageProcessor === "function") {
         window.initializeImageProcessor(img);
       }
-      // Create canvas and set its dimensions
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0, img.width, img.height);
-      document.body.appendChild(canvas);
-      canvas.style.display = "none";
     };
     img.src = imageSrc;
   }, [imageSrc]);
@@ -84,6 +41,7 @@ export default function Home() {
         reader.onload = (event) => {
           setImageSrc(event.target.result);
           setProcessedImageSrc(null);
+          setOutlineImageSrc(null);
         };
         reader.readAsDataURL(resizedBlob);
       } catch (error) {
@@ -93,8 +51,13 @@ export default function Home() {
   };
 
   const handleProcessClick = useCallback(() => {
-    if (typeof window.processImage === "function") {
-      const canvas = document.querySelector("canvas");
+    if (typeof window.processImage === "function" && originalImageRef.current) {
+      const canvas = document.createElement("canvas");
+      canvas.width = originalImageRef.current.width;
+      canvas.height = originalImageRef.current.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(originalImageRef.current, 0, 0);
+
       const result = window.processImage(
         canvas,
         numColors,
@@ -106,9 +69,12 @@ export default function Home() {
       setProcessedImageSrc(result.processedImageDataUrl);
       setOutlineImageSrc(result.outlineImageDataUrl);
       setDominantColors(result.colors);
+      setBlobCenters(result.blobCenters);
       setIsModalOpen(true);
     } else {
-      console.error("processImage function not found");
+      console.error(
+        "processImage function not found or original image not loaded"
+      );
     }
   }, [numColors, minBlobSize, minBlobThickness, blurRadius, blurType]);
 
@@ -154,7 +120,7 @@ export default function Home() {
           processedImageSrc={processedImageSrc}
           outlineImageSrc={outlineImageSrc}
           showOutline={showOutline}
-          toggleImage={toggleImage}
+          blobCenters={blobCenters}
         />
       </Modal>
     </Layout>
