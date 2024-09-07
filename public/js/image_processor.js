@@ -40,8 +40,6 @@
     }
 
     const dominantColors = findDominantColors(processedImageData, numColors);
-
-    // Create a color map for quick index lookup
     const colorMap = new Map(
       dominantColors.map((color, index) => [color.join(","), index])
     );
@@ -59,21 +57,42 @@
       processedImageData.data[i + 2] = closestColor[2];
     }
 
-    mergeProblematicBlobs(processedImageData, minBlobSize, minBlobThickness);
+    console.log(`Minimum blob size set to: ${minBlobSize}`);
+    const { mergedImageData, blobSizes } = iterativeMergeBlobs(
+      processedImageData,
+      minBlobSize,
+      minBlobThickness
+    );
+
+    // Log blob sizes
+    console.log("Final blob sizes after iterative merging:");
+    blobSizes.sort((a, b) => a - b);
+    blobSizes.forEach((size, index) => {
+      if (size < minBlobSize) {
+        console.warn(
+          `Warning: Blob ${
+            index + 1
+          } is still smaller than the minimum size (${size} < ${minBlobSize})`
+        );
+      }
+    });
+
+    console.log(`Smallest blob size: ${blobSizes[0]}`);
+    console.log(`Largest blob size: ${blobSizes[blobSizes.length - 1]}`);
+    console.log(`Total number of blobs: ${blobSizes.length}`);
 
     // Generate the outline image with numbered blobs
     const { outlineImageData, blobCenters } = generateOutlineImageWithNumbers(
-      processedImageData,
+      mergedImageData,
       colorMap
     );
 
-    ctx.putImageData(processedImageData, 0, 0);
+    ctx.putImageData(mergedImageData, 0, 0);
     const processedDataUrl = canvas.toDataURL();
 
     ctx.putImageData(outlineImageData, 0, 0);
     const outlineDataUrl = canvas.toDataURL();
 
-    // Convert dominantColors to hex format
     const hexColors = dominantColors.map((color) => {
       return `#${color[0].toString(16).padStart(2, "0")}${color[1]
         .toString(16)
@@ -88,12 +107,113 @@
     };
   }
 
+  function iterativeMergeBlobs(
+    imageData,
+    minBlobSize,
+    minBlobThickness,
+    maxIterations = 10
+  ) {
+    let currentImageData = new ImageData(
+      new Uint8ClampedArray(imageData.data),
+      imageData.width,
+      imageData.height
+    );
+    let iteration = 0;
+    let hasSmallBlobs = true;
+
+    while (hasSmallBlobs && iteration < maxIterations) {
+      console.log(`Merging iteration ${iteration + 1}`);
+      const { mergedImageData, blobSizes } = mergeProblematicBlobs(
+        currentImageData,
+        minBlobSize,
+        minBlobThickness
+      );
+      currentImageData = mergedImageData;
+
+      hasSmallBlobs = blobSizes.some((size) => size < minBlobSize);
+      iteration++;
+
+      console.log(
+        `Blobs smaller than ${minBlobSize}: ${
+          blobSizes.filter((size) => size < minBlobSize).length
+        }`
+      );
+      console.log(`Smallest blob size: ${Math.min(...blobSizes)}`);
+    }
+
+    if (iteration === maxIterations) {
+      console.warn(
+        `Reached maximum iterations (${maxIterations}) without eliminating all small blobs.`
+      );
+    } else {
+      console.log(`Completed merging in ${iteration} iterations.`);
+    }
+
+    return mergeProblematicBlobs(
+      currentImageData,
+      minBlobSize,
+      minBlobThickness
+    );
+  }
+
+  function mergeProblematicBlobs(imageData, minBlobSize, minBlobThickness) {
+    const width = imageData.width;
+    const height = imageData.height;
+    const visited = new Array(width * height).fill(false);
+    const mergedImageData = new ImageData(
+      new Uint8ClampedArray(imageData.data),
+      width,
+      height
+    );
+    const blobSizes = [];
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!visited[y * width + x]) {
+          const blob = floodFill(imageData, x, y, visited);
+          const blobSize = blob.length;
+          blobSizes.push(blobSize);
+
+          const shapeAnalysis = analyzeBlobShape(blob, width, height);
+
+          if (
+            blobSize < minBlobSize ||
+            shapeAnalysis.thickness < minBlobThickness
+          ) {
+            const surroundingColors = getSurroundingColors(
+              imageData,
+              blob,
+              width,
+              height
+            );
+            const dominantColor =
+              findDominantSurroundingColor(surroundingColors);
+
+            for (const [bx, by] of blob) {
+              setColorAt(mergedImageData, bx, by, dominantColor);
+            }
+          }
+        }
+      }
+    }
+
+    return { mergedImageData, blobSizes };
+  }
+
   function generateOutlineImageWithNumbers(imageData, colorMap) {
     const width = imageData.width;
     const height = imageData.height;
     const outlineData = new ImageData(width, height);
     const visited = new Array(width * height).fill(false);
     const blobCenters = [];
+
+    // Fill the outline image with white
+    for (let i = 0; i < outlineData.data.length; i += 4) {
+      outlineData.data[i] = 255; // R
+      outlineData.data[i + 1] = 255; // G
+      outlineData.data[i + 2] = 255; // B
+      outlineData.data[i + 3] = 255; // A
+    }
 
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -104,51 +224,45 @@
             const color = getColorAt(imageData, x, y);
             const colorIndex = colorMap.get(color.join(","));
             blobCenters.push({ x: center.x, y: center.y, index: colorIndex });
-          }
-        }
-      }
-    }
 
-    // Draw outlines
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const currentColor = getColorAt(imageData, x, y);
-        let isEdge = false;
-
-        // Check neighboring pixels
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const nx = x + dx;
-            const ny = y + dy;
-
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              const neighborColor = getColorAt(imageData, nx, ny);
-              if (!colorEquals(currentColor, neighborColor)) {
-                isEdge = true;
-                break;
+            // Draw 1px outline
+            blob.forEach(([bx, by]) => {
+              if (isEdgePixel(imageData, bx, by)) {
+                const idx = (by * width + bx) * 4;
+                outlineData.data[idx] = 0; // R
+                outlineData.data[idx + 1] = 0; // G
+                outlineData.data[idx + 2] = 0; // B
+                outlineData.data[idx + 3] = 255; // A
               }
-            }
+            });
           }
-          if (isEdge) break;
-        }
-
-        const idx = (y * width + x) * 4;
-        if (isEdge) {
-          outlineData.data[idx] = 0;
-          outlineData.data[idx + 1] = 0;
-          outlineData.data[idx + 2] = 0;
-          outlineData.data[idx + 3] = 255;
-        } else {
-          outlineData.data[idx] = 255;
-          outlineData.data[idx + 1] = 255;
-          outlineData.data[idx + 2] = 255;
-          outlineData.data[idx + 3] = 255;
         }
       }
     }
 
     return { outlineImageData: outlineData, blobCenters: blobCenters };
+  }
+
+  function isEdgePixel(imageData, x, y) {
+    const currentColor = getColorAt(imageData, x, y);
+    const width = imageData.width;
+    const height = imageData.height;
+
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx;
+        const ny = y + dy;
+
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          const neighborColor = getColorAt(imageData, nx, ny);
+          if (!colorEquals(currentColor, neighborColor)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   function calculateBlobCenter(blob) {
@@ -219,39 +333,6 @@
 
   function centroidsEqual(c1, c2) {
     return c1.every((cent, i) => cent.every((val, j) => val === c2[i][j]));
-  }
-
-  function mergeProblematicBlobs(imageData, minBlobSize, minBlobThickness) {
-    const width = imageData.width;
-    const height = imageData.height;
-    const visited = new Array(width * height).fill(false);
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (!visited[y * width + x]) {
-          const blob = floodFill(imageData, x, y, visited);
-          const shapeAnalysis = analyzeBlobShape(blob, width, height);
-
-          if (
-            shapeAnalysis.area < minBlobSize ||
-            shapeAnalysis.thickness < minBlobThickness
-          ) {
-            const surroundingColors = getSurroundingColors(
-              imageData,
-              blob,
-              width,
-              height
-            );
-            const dominantColor =
-              findDominantSurroundingColor(surroundingColors);
-
-            for (const [bx, by] of blob) {
-              setColorAt(imageData, bx, by, dominantColor);
-            }
-          }
-        }
-      }
-    }
   }
 
   function floodFill(imageData, startX, startY, visited) {

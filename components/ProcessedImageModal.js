@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const ProcessedImageModal = ({
   dominantColors,
@@ -7,6 +7,7 @@ const ProcessedImageModal = ({
   showOutline,
   blobCenters,
 }) => {
+  const [fontSize, setFontSize] = useState(12); // Default font size
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -20,7 +21,7 @@ const ProcessedImageModal = ({
         ctx.drawImage(img, 0, 0);
 
         // Draw numbers
-        ctx.font = "12px Arial";
+        ctx.font = `${fontSize}px Arial`;
         ctx.fillStyle = "red";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -31,10 +32,28 @@ const ProcessedImageModal = ({
       };
       img.src = outlineImageSrc;
     }
-  }, [showOutline, outlineImageSrc, blobCenters]);
+  }, [showOutline, outlineImageSrc, blobCenters, fontSize]);
+
+  const handleFontSizeChange = (e) => {
+    setFontSize(Number(e.target.value));
+  };
 
   return (
     <div className="modal-content-wrapper">
+      {showOutline && (
+        <div className="modal-controls">
+          <label htmlFor="font-size-slider">Font Size: {fontSize}px</label>
+          <input
+            id="font-size-slider"
+            type="range"
+            min="4"
+            max="16"
+            value={fontSize}
+            onChange={handleFontSizeChange}
+            className="font-size-slider"
+          />
+        </div>
+      )}
       <div className="modal-colors-container">
         <h3>Colors</h3>
         <ul className="color-list">

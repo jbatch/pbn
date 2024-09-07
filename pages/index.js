@@ -5,6 +5,50 @@ import ProcessingSettings from "../components/ProcessingSettings";
 import Modal from "../components/Modal";
 import ProcessedImageModal from "../components/ProcessedImageModal";
 
+const MAX_IMAGE_SIZE = 1200; // Maximum width or height in pixels
+const MIN_IMAGE_SIZE = 400; // Minimum width or height in pixels
+
+function resizeImage(file, minSize, maxSize) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate the scaling factor
+        let scale = 1;
+
+        // If the image is smaller than the minimum size
+        if (width < minSize && height < minSize) {
+          scale = Math.max(minSize / width, minSize / height);
+        }
+        // If the image is larger than the maximum size
+        else if (width > maxSize || height > maxSize) {
+          scale = Math.min(maxSize / width, maxSize / height);
+        }
+
+        // Apply the scaling
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, file.type);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function Home() {
   const [imageSrc, setImageSrc] = useState("/mountains.jpeg");
   const [processedImageSrc, setProcessedImageSrc] = useState(null);
@@ -36,7 +80,11 @@ export default function Home() {
     const file = e.target.files[0];
     if (file) {
       try {
-        const resizedBlob = await resizeImage(file, MAX_IMAGE_SIZE);
+        const resizedBlob = await resizeImage(
+          file,
+          MIN_IMAGE_SIZE,
+          MAX_IMAGE_SIZE
+        );
         const reader = new FileReader();
         reader.onload = (event) => {
           setImageSrc(event.target.result);

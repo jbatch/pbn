@@ -10,8 +10,9 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
         Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
-    line-height: 1.6;
+    line-height: 1.4;
     color: #333;
+    font-size: 14px;
 }
 
 /* Layout styles */
@@ -24,14 +25,14 @@ body {
 .header {
     background-color: #0070f3;
     color: white;
-    padding: 1rem;
+    padding: 0.5rem;
     text-align: center;
 }
 
 .title {
     margin: 0;
     line-height: 1.15;
-    font-size: 2rem;
+    font-size: 1.5rem;
 }
 
 .main {
@@ -39,7 +40,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 2rem;
+    padding: 1rem;
 }
 
 .content {
@@ -52,8 +53,8 @@ body {
 /* Card styles */
 .card {
     flex: 1;
-    margin: 0 1rem;
-    padding: 1.5rem;
+    margin: 0 0.5rem;
+    padding: 1rem;
     text-align: left;
     color: inherit;
     text-decoration: none;
@@ -67,33 +68,34 @@ body {
 }
 
 .card h2 {
-    margin: 0 0 1rem 0;
-    font-size: 1.5rem;
+    margin: 0 0 0.5rem 0;
+    font-size: 1.2rem;
 }
 
 /* Form styles */
 .form-group {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
     font-weight: 500;
+    font-size: 0.9rem;
 }
 
 .form-group input,
 .form-group select {
     width: 100%;
-    padding: 0.5rem;
-    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.9rem;
     border: 1px solid #ccc;
     border-radius: 4px;
 }
 
 .button {
-    font-size: 1rem;
-    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    padding: 0.25rem 0.5rem;
     background-color: #0070f3;
     color: white;
     border: none;
@@ -114,25 +116,26 @@ body {
 }
 
 .image-section {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     width: 100%;
 }
 
 .image-section h3 {
-    margin-bottom: 0.5rem;
-    font-size: 1.2rem;
+    margin-bottom: 0.25rem;
+    font-size: 1rem;
 }
 
 .image {
     width: 100%;
     height: auto;
+    max-height: calc(100vh - 250px);
     object-fit: contain;
     border: 1px solid #eaeaea;
     border-radius: 4px;
 }
 
 .file-input {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     width: 100%;
 }
 
@@ -145,7 +148,7 @@ body {
     .card,
     .image-upload-card {
         max-width: 100%;
-        margin: 0 0 1rem 0;
+        margin: 0 0 0.5rem 0;
     }
 }
 
@@ -305,4 +308,18 @@ body {
 
 .modal-close:hover {
     color: #000;
+}
+
+.modal-controls {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.modal-controls label {
+    margin-right: 1rem;
+}
+
+.font-size-slider {
+    width: 150px;
 }
