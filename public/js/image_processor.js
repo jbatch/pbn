@@ -12,55 +12,121 @@
   }
 
   function processImage(
+    canvas,
     numColors,
     minBlobSize,
     minBlobThickness,
     blurRadius,
     blurType
   ) {
-    if (!originalImageData) {
-      alert("No image loaded. Please try again.");
-      return;
-    }
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    const outputCanvas = document.getElementById("outputCanvas");
-    const outputImage = document.getElementById("outputImage");
-
-    outputCanvas.width = originalImageData.width;
-    outputCanvas.height = originalImageData.height;
-    const ctx = outputCanvas.getContext("2d");
-
-    let imageData = new ImageData(
-      new Uint8ClampedArray(originalImageData.data),
-      originalImageData.width,
-      originalImageData.height
+    let processedImageData = new ImageData(
+      new Uint8ClampedArray(imageData.data),
+      imageData.width,
+      imageData.height
     );
 
     if (blurType === "gaussian") {
-      imageData = applyGaussianBlur(imageData, blurRadius);
+      processedImageData = applyGaussianBlur(processedImageData, blurRadius);
     } else if (blurType === "bilateral") {
-      imageData = applyBilateralFilter(imageData, blurRadius, 30, 30);
+      processedImageData = applyBilateralFilter(
+        processedImageData,
+        blurRadius,
+        30,
+        30
+      );
     }
 
-    const dominantColors = findDominantColors(imageData, numColors);
+    const dominantColors = findDominantColors(processedImageData, numColors);
 
-    for (let i = 0; i < imageData.data.length; i += 4) {
+    for (let i = 0; i < processedImageData.data.length; i += 4) {
       const pixel = [
-        imageData.data[i],
-        imageData.data[i + 1],
-        imageData.data[i + 2],
+        processedImageData.data[i],
+        processedImageData.data[i + 1],
+        processedImageData.data[i + 2],
       ];
       const closestColor = findClosestColor(pixel, dominantColors);
 
-      imageData.data[i] = closestColor[0];
-      imageData.data[i + 1] = closestColor[1];
-      imageData.data[i + 2] = closestColor[2];
+      processedImageData.data[i] = closestColor[0];
+      processedImageData.data[i + 1] = closestColor[1];
+      processedImageData.data[i + 2] = closestColor[2];
     }
 
-    mergeProblematicBlobs(imageData, minBlobSize, minBlobThickness);
+    mergeProblematicBlobs(processedImageData, minBlobSize, minBlobThickness);
 
-    ctx.putImageData(imageData, 0, 0);
-    outputImage.src = outputCanvas.toDataURL();
+    ctx.putImageData(processedImageData, 0, 0);
+
+    // Convert dominantColors to hex format
+    const hexColors = dominantColors.map((color) => {
+      return `#${color[0].toString(16).padStart(2, "0")}${color[1]
+        .toString(16)
+        .padStart(2, "0")}${color[2].toString(16).padStart(2, "0")}`;
+    });
+
+    // Generate the outline image
+    const outlineImageData = generateOutlineImage(processedImageData);
+
+    // Convert processedImageData back to canvas
+    ctx.putImageData(processedImageData, 0, 0);
+    const processedDataUrl = canvas.toDataURL();
+
+    // Convert outlineImageData to canvas
+    ctx.putImageData(outlineImageData, 0, 0);
+    const outlineDataUrl = canvas.toDataURL();
+
+    return {
+      processedImageDataUrl: processedDataUrl,
+      outlineImageDataUrl: outlineDataUrl,
+      colors: hexColors,
+    };
+  }
+
+  function generateOutlineImage(imageData) {
+    const width = imageData.width;
+    const height = imageData.height;
+    const outlineData = new ImageData(width, height);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const currentColor = getColorAt(imageData, x, y);
+        let isEdge = false;
+
+        // Check neighboring pixels
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const neighborColor = getColorAt(imageData, nx, ny);
+              if (!colorEquals(currentColor, neighborColor)) {
+                isEdge = true;
+                break;
+              }
+            }
+          }
+          if (isEdge) break;
+        }
+
+        const idx = (y * width + x) * 4;
+        if (isEdge) {
+          outlineData.data[idx] = 0;
+          outlineData.data[idx + 1] = 0;
+          outlineData.data[idx + 2] = 0;
+          outlineData.data[idx + 3] = 255;
+        } else {
+          outlineData.data[idx] = 255;
+          outlineData.data[idx + 1] = 255;
+          outlineData.data[idx + 2] = 255;
+          outlineData.data[idx + 3] = 255;
+        }
+      }
+    }
+
+    return outlineData;
   }
 
   function findDominantColors(imageData, numColors) {

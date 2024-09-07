@@ -1,120 +1,162 @@
-import { useEffect, useState } from "react";
-import Head from "next/head";
+import React, { useEffect, useState, useCallback } from "react";
+import Layout from "../Layout";
+import ImageUpload from "../components/ImageUpload";
+import ProcessingSettings from "../components/ProcessingSettings";
+import Modal from "../components/Modal";
+import ProcessedImageModal from "../components/ProcessedImageModal";
+
+const MAX_IMAGE_SIZE = 1200; // Maximum width or height in pixels
+
+function resizeImage(file, maxSize) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxSize) {
+            height *= maxSize / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width *= maxSize / height;
+            height = maxSize;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, file.type);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function Home() {
   const [imageSrc, setImageSrc] = useState("/mountains.jpeg");
+  const [processedImageSrc, setProcessedImageSrc] = useState(null);
+  const [outlineImageSrc, setOutlineImageSrc] = useState(null);
+  const [dominantColors, setDominantColors] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showOutline, setShowOutline] = useState(false);
+  const [numColors, setNumColors] = useState(5);
+  const [minBlobSize, setMinBlobSize] = useState(100);
+  const [minBlobThickness, setMinBlobThickness] = useState(3);
+  const [blurRadius, setBlurRadius] = useState(2);
+  const [blurType, setBlurType] = useState("gaussian");
 
   useEffect(() => {
-    // Initialize the image processor with the placeholder image
     const img = new Image();
     img.onload = () => {
       if (typeof window.initializeImageProcessor === "function") {
         window.initializeImageProcessor(img);
       }
+      // Create canvas and set its dimensions
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, img.width, img.height);
+      document.body.appendChild(canvas);
+      canvas.style.display = "none";
     };
     img.src = imageSrc;
   }, [imageSrc]);
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImageSrc(event.target.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const resizedBlob = await resizeImage(file, MAX_IMAGE_SIZE);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setImageSrc(event.target.result);
+          setProcessedImageSrc(null);
+        };
+        reader.readAsDataURL(resizedBlob);
+      } catch (error) {
+        console.error("Error resizing image:", error);
+      }
     }
   };
 
-  const handleProcessClick = () => {
-    const numColors = parseInt(document.getElementById("numColors").value);
-    const minBlobSize = parseInt(document.getElementById("minBlobSize").value);
-    const minBlobThickness = parseFloat(
-      document.getElementById("minBlobThickness").value
-    );
-    const blurRadius = parseInt(document.getElementById("blurRadius").value);
-    const blurType = document.getElementById("blurType").value;
+  const handleProcessClick = useCallback(() => {
     if (typeof window.processImage === "function") {
-      window.processImage(
+      const canvas = document.querySelector("canvas");
+      const result = window.processImage(
+        canvas,
         numColors,
         minBlobSize,
         minBlobThickness,
         blurRadius,
         blurType
       );
+      setProcessedImageSrc(result.processedImageDataUrl);
+      setOutlineImageSrc(result.outlineImageDataUrl);
+      setDominantColors(result.colors);
+      setIsModalOpen(true);
     } else {
       console.error("processImage function not found");
     }
+  }, [numColors, minBlobSize, minBlobThickness, blurRadius, blurType]);
+
+  const toggleImage = () => {
+    setShowOutline(!showOutline);
   };
 
-  return (
-    <div>
-      <Head>
-        <title>Image Color Processor</title>
-        <meta
-          name="description"
-          content="Process images to find dominant colors"
-        />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+  const toggleButton = (
+    <button onClick={toggleImage} className="toggle-outline-btn">
+      {showOutline ? "Show Processed" : "Show Outline"}
+    </button>
+  );
 
-      <main>
-        <h1>Image Color Processor</h1>
-        <input
-          type="file"
-          id="imageUpload"
-          accept="image/*"
-          onChange={handleImageUpload}
+  return (
+    <Layout>
+      <div className="content">
+        <ProcessingSettings
+          numColors={numColors}
+          setNumColors={setNumColors}
+          minBlobSize={minBlobSize}
+          setMinBlobSize={setMinBlobSize}
+          minBlobThickness={minBlobThickness}
+          setMinBlobThickness={setMinBlobThickness}
+          blurRadius={blurRadius}
+          setBlurRadius={setBlurRadius}
+          blurType={blurType}
+          setBlurType={setBlurType}
+          handleProcessClick={handleProcessClick}
         />
-        <br />
-        <br />
-        <label htmlFor="numColors">Number of dominant colors:</label>
-        <input type="number" id="numColors" defaultValue="5" min="1" max="16" />
-        <br />
-        <br />
-        <label htmlFor="minBlobSize">Minimum blob size (in pixels):</label>
-        <input type="number" id="minBlobSize" defaultValue="100" min="1" />
-        <br />
-        <br />
-        <label htmlFor="minBlobThickness">Minimum blob thickness:</label>
-        <input
-          type="number"
-          id="minBlobThickness"
-          defaultValue="3"
-          min="1"
-          step="0.1"
+        <ImageUpload
+          imageSrc={imageSrc}
+          handleImageUpload={handleImageUpload}
         />
-        <br />
-        <br />
-        <label htmlFor="blurRadius">Blur radius:</label>
-        <input
-          type="number"
-          id="blurRadius"
-          defaultValue="2"
-          min="0"
-          max="10"
-          step="1"
+      </div>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Processed Image"
+        toggleButton={toggleButton}
+      >
+        <ProcessedImageModal
+          dominantColors={dominantColors}
+          processedImageSrc={processedImageSrc}
+          outlineImageSrc={outlineImageSrc}
+          showOutline={showOutline}
+          toggleImage={toggleImage}
         />
-        <br />
-        <br />
-        <label htmlFor="blurType">Blur type:</label>
-        <select id="blurType">
-          <option value="gaussian">Gaussian Blur</option>
-          <option value="bilateral">Bilateral Filter (Edge-Preserving)</option>
-        </select>
-        <br />
-        <br />
-        <button onClick={handleProcessClick}>Process Image</button>
-        <br />
-        <br />
-        <canvas id="outputCanvas" style={{ display: "none" }}></canvas>
-        <img
-          id="outputImage"
-          src={imageSrc}
-          alt="Processed Image"
-          style={{ maxWidth: "100%", height: "auto" }}
-        />
-      </main>
-    </div>
+      </Modal>
+    </Layout>
   );
 }
