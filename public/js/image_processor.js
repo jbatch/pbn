@@ -111,7 +111,7 @@
     imageData,
     minBlobSize,
     minBlobThickness,
-    maxIterations = 10
+    maxIterations = 15
   ) {
     let currentImageData = new ImageData(
       new Uint8ClampedArray(imageData.data),
@@ -122,7 +122,6 @@
     let hasSmallBlobs = true;
 
     while (hasSmallBlobs && iteration < maxIterations) {
-      console.log(`Merging iteration ${iteration + 1}`);
       const { mergedImageData, blobSizes } = mergeProblematicBlobs(
         currentImageData,
         minBlobSize,
@@ -132,13 +131,6 @@
 
       hasSmallBlobs = blobSizes.some((size) => size < minBlobSize);
       iteration++;
-
-      console.log(
-        `Blobs smaller than ${minBlobSize}: ${
-          blobSizes.filter((size) => size < minBlobSize).length
-        }`
-      );
-      console.log(`Smallest blob size: ${Math.min(...blobSizes)}`);
     }
 
     if (iteration === maxIterations) {
